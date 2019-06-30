@@ -32,14 +32,36 @@ class CeresSolverConan(ConanFile):
         url = "https://github.com/ceres-solver/ceres-solver/archive/%s%s" % (self.version, extension)
         tools.get(url)
         shutil.move("ceres-solver-%s" % self.version, "ceres-solver")
+
         tools.replace_in_file("ceres-solver/CMakeLists.txt", "cmake_policy(VERSION 2.8)",
-                              "cmake_policy(VERSION 2.8)\ncmake_policy(SET CMP0025 NEW)")
+                              "cmake_policy(VERSION 2.8)\n"
+                              "cmake_policy(SET CMP0025 NEW)\n")
+
         # policy CMP0025 solves https://cmake.org/pipermail/cmake/2018-March/067284.html
+        tools.replace_in_file("ceres-solver/CMakeLists.txt", "project(Ceres C CXX)",
+                              "project(Ceres C CXX)\n"
+                              "include(${CMAKE_BINARY_DIR}/conanbuildinfo.cmake)\n"
+                              "conan_basic_setup()\n")
+
+        if tools.os_info.is_macos: # find_package(Threads REQUIRED) fails in macos for not finding pthread.h
+            tools.replace_in_file("ceres-solver/CMakeLists.txt", "find_package(Threads REQUIRED)",
+                                  'set(CMAKE_THREAD_LIBS_INIT "-lpthread")\n'
+                                  'set(CMAKE_HAVE_THREADS_LIBRARY 1)\n'
+                                  'set(CMAKE_USE_WIN32_THREADS_INIT 0)\n'
+                                  'set(CMAKE_USE_PTHREADS_INIT 1)\n'
+                                  'set(THREADS_PREFER_PTHREAD_FLAG ON)')
+
+        if self.settings.compiler.cppstd == "17":
+            # std::random_shuffle is removed from c++17
+            # https://github.com/ceres-solver/ceres-solver/issues/373
+            tools.replace_in_file("ceres-solver/internal/ceres/schur_eliminator_impl.h",
+                                  "random_shuffle(chunks_.begin(), chunks_.end())", "")
 
     def _configure_cmake(self, package_folder=None):
         cmake_defs = {}
         cmake_defs["BUILD_TESTING"] = self.options.build_tests
         cmake_defs["BUILD_EXAMPLES"] = self.options.build_examples
+        cmake_defs["LAPACK"] = "OFF"
         cmake_defs["SUITESPARSE"] = "OFF"  # license issue; can't use GPL license
         cmake_defs["CXSPARSE"] = "OFF"
         cmake_defs["EIGENSPARSE"] = "ON"
@@ -47,15 +69,7 @@ class CeresSolverConan(ConanFile):
         cmake_defs["CXX11_THREADS"] = "ON"
         cmake_defs["BUILD_SHARED_LIBS"] = self.options.shared
         cmake_defs["CMAKE_POSITION_INDEPENDENT_CODE"] = "ON"
-
-        cmake_defs['EIGEN_INCLUDE_DIR_HINTS'] = self.deps_cpp_info['eigen'].includedirs[0]
-
-        cmake_defs['GLOG_INCLUDE_DIR_HINTS'] = self.deps_cpp_info['glog'].includedirs[0]
-        cmake_defs['GLOG_LIBRARY_DIR_HINTS'] = self.deps_cpp_info['glog'].libdirs[0]
-
-        cmake_defs['GFLAGS_INCLUDE_DIR_HINTS'] = self.deps_cpp_info['gflags'].includedirs[0]
-        cmake_defs['GFLAGS_LIBRARY_DIR_HINTS'] = self.deps_cpp_info['gflags'].libdirs[0]
-
+        cmake_defs["GFLAGS_NAMESPACE"] = "gflags"
         if package_folder:
             cmake_defs["CMAKE_INSTALL_PREFIX"] = package_folder
 
@@ -72,9 +86,14 @@ class CeresSolverConan(ConanFile):
 
     def package_info(self):
         self.cpp_info.includedirs = ['include']  # Ordered list of include paths
-        self.cpp_info.libs = [self.name]  # The libs to link against
+        self.cpp_info.libs = ["ceres"]  # The libs to link against
         self.cpp_info.libdirs = ['lib']  # Directories where libraries can be found
+
+    def imports(self):
+        self.copy("license*", dst="licenses", folder=True, ignore_case=True)
 
     def package(self):
         cmake = self._configure_cmake(package_folder=self.package_folder)
         cmake.install()
+        # licenses
+        self.copy("license*", dst="licenses", keep_path=True)
