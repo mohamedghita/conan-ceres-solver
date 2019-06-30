@@ -33,11 +33,11 @@ class CeresSolverConan(ConanFile):
         tools.get(url)
         shutil.move("ceres-solver-%s" % self.version, "ceres-solver")
 
+        # policy CMP0025 solves https://cmake.org/pipermail/cmake/2018-March/067284.html
         tools.replace_in_file("ceres-solver/CMakeLists.txt", "cmake_policy(VERSION 2.8)",
                               "cmake_policy(VERSION 2.8)\n"
                               "cmake_policy(SET CMP0025 NEW)\n")
 
-        # policy CMP0025 solves https://cmake.org/pipermail/cmake/2018-March/067284.html
         tools.replace_in_file("ceres-solver/CMakeLists.txt", "project(Ceres C CXX)",
                               "project(Ceres C CXX)\n"
                               "include(${CMAKE_BINARY_DIR}/conanbuildinfo.cmake)\n"
@@ -86,7 +86,7 @@ class CeresSolverConan(ConanFile):
 
     def package_info(self):
         self.cpp_info.includedirs = ['include']  # Ordered list of include paths
-        self.cpp_info.libs = ["ceres"]  # The libs to link against
+        self.cpp_info.libs = ["ceres" if self.settings.build_type != "Debug" else "ceres-debug"]
         self.cpp_info.libdirs = ['lib']  # Directories where libraries can be found
 
     def imports(self):
