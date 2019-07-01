@@ -1,3 +1,6 @@
+# Created by Mohamed Ghita on 2019-06-30.
+# Copyright (c) 2019 Radalytica a.s. All rights reserved.
+
 from conans import ConanFile, CMake, tools
 import shutil
 import os.path
